@@ -6,4 +6,4 @@
 # An example controller showing a sample home page
 GET     /                           controllers.HomeController.index()
 GET     /json                       controllers.HomeController.getJSON()
-
+PUT     /init                       controllers.HomeController.createTables()

@@ -7,3 +7,4 @@
 GET     /                           controllers.HomeController.index()
 GET     /json                       controllers.HomeController.getJSON()
 PUT     /init                       controllers.HomeController.createTables()
+PUT     /insertSamples             controllers.HomeController.insertSamples()

@@ -5,6 +5,8 @@
 
 # An example controller showing a sample home page
 GET     /                           controllers.HomeController.index()
+PUT     /init                       controllers.HomeController.createTables()
+PUT     /insertSamples             controllers.HomeController.insertSamples()
 POST    /login                      controllers.HomeController.login()
 GET     /logout                     controllers.HomeController.logout()
 POST    /register                   controllers.HomeController.register()

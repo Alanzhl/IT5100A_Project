@@ -74,6 +74,10 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // return value: (userID, identifier, name, email) / None
   def getUserInfo(id: Int): Future[Option[(Int, String, String, String)]] = ???
 
+  // create a new timeslot
+  // return value: slot id / None
+  def createTimeslot(startAt: Timestamp, endAt: Timestamp, vacancy: Int = 50):Future[Option[Future[Int]]] = ???
+
   // get a specific timeslot according to its start time
   // return value: detailed slot messages (slotID, startAt, endAt, vacancy, status)
   def getATimeslot(startAt: Timestamp): Future[Option[(Int, Timestamp, Timestamp, Int, Short)]] = ???

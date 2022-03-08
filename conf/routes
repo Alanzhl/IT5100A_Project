@@ -4,6 +4,7 @@
 # ~~~~
 
 # An example controller showing a sample home page
+GET     /testget                    controllers.HomeController.test()
 GET     /                           controllers.HomeController.index()
 PUT     /init                       controllers.HomeController.createTables()
 PUT     /insertSamples              controllers.HomeController.insertSamples()

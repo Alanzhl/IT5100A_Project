@@ -67,19 +67,24 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // return value: number of user created / conflict message
   def createUser(name: String, identifier: String, email: String, password: String): Future[Either[Future[Int], String]] = {
     val matches = db.run(users.filter(u => u.identifier === identifier || u.email === email).result)
-    matches.map(u => if (u.head.identifier == identifier) {
-      Right(s"Matric number conflict with existing user ${u.head.userID}.")
-    } else if (u.head.email == email) {
-      Right(s"Email conflict with existing user ${u.head.userID}")
-    } else {
+    matches.map(u => if (u.isEmpty) {
       Left(db.run(users += User(0, identifier, name, email, password)))    // handle count == 0 at the controller
+    } else {
+      if (u.head.identifier == identifier) {
+        Right(s"Matric number conflict with existing user ${u.head.userID}.")
+      } else {
+        Right(s"Email conflict with existing user ${u.head.userID}")
+      }
     })
   }
 
   // get detailed user info
   // param: user id
   // return value: (userID, identifier, name, email) / None
-  def getUserInfo(id: Int): Future[Option[(Int, String, String, String)]] = ???
+  def getUserInfo(id: Int): Future[Option[User]] = {
+    val matches = db.run(users.filter(u => u.userID === id).result)
+    matches.map(r => r.headOption)
+  }
 
   // create a new timeslot
   // return value: slot id / None

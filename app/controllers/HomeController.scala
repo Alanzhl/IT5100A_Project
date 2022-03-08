@@ -6,8 +6,7 @@ import play.api.mvc._
 import play.api.libs.json.Json
 import slick.jdbc.JdbcProfile
 
-import scala.concurrent.ExecutionContext
-
+import scala.concurrent.{ExecutionContext, Future}
 import models._
 
 @Singleton
@@ -130,5 +129,19 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
   // (one-time insertion) insert sample data to the tables for testing purpose
   def insertSamples(): Action[AnyContent] = Action.async { _ =>
     model.insertSamples().map(info => Ok(info))
+  }
+
+  // current test: getUserInfo
+  def test(): Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+    val result = model.getUserInfo(1)
+    result.map[Result] {
+      case Some(user) => Ok(Json.obj(
+        "success" -> 0,
+        "user" -> user.toString
+      )).withSession("uid" -> request.session.get("uid").get)
+      case _ => Unauthorized(Json.obj(
+        "success" -> 1
+      ))
+    }
   }
 }

@@ -7,9 +7,11 @@ import play.api.mvc._
 import services._
 import slick.jdbc.JdbcProfile
 
+import java.sql.Timestamp
 import javax.inject._
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 @Singleton
 class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigProvider,
@@ -78,6 +80,30 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     }, 10.seconds)
   }
 
+  def getTimeslots: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+    val form = extractForm(request)
+    val startAt = form.getOrElse("startAt", Seq())
+    val endAt = form.getOrElse("endAt", Seq())
+    if (startAt.isEmpty || endAt.isEmpty) {
+      Future.successful(Unauthorized(Json.obj(
+        "success" -> 1,
+        "message" -> "missing compulsory field: startAt or endAt (YYYY-MM-DD hh:mm:ss)."
+      )))
+    } else {
+      model.listTimeslots(Timestamp.valueOf(startAt.head), Timestamp.valueOf(endAt.head)).map{ r =>
+        if (r.nonEmpty) {
+          Ok(Json.obj(
+            "success" -> 0,
+            "slots" -> r.toString()))
+        } else {
+          Ok(Json.obj(
+            "success" -> 0,
+            "slots" -> "No available slots"))
+        }
+      }
+    }
+  }
+
   // bookTimeslot: user book a time slot
   def bookTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     Future.successful(Ok(Json.toJson(
@@ -114,24 +140,73 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
   }
 
   // addTimeslot: staffs add a timeslot
-  def addTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+  def addTimeslot(): Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+    val form = extractForm(request)
+    val startAt = form.getOrElse("startAt", Seq())
+    val endAt = form.getOrElse("endAt", Seq())
+    val vacancy = form.getOrElse("vacancy", Seq("50"))
+    if (startAt.isEmpty || endAt.isEmpty) {
+      Future.successful(Unauthorized(Json.obj(
+        "success" -> 1,
+        "message" -> "missing compulsory field: startAt or endAt (YYYY-MM-DD hh:mm:ss)."
+      )))
+    } else {
+      val result = model.createTimeslot(
+        Timestamp.valueOf(startAt.head),
+        Timestamp.valueOf(endAt.head),
+        vacancy.head.toInt)
+      Await.result(result.map[Future[Result]] {
+        case Some(sidFuture) => sidFuture.map{sid =>
+          Ok(Json.obj(
+            "success" -> 0,
+            "slot_id" -> sid))}
+        case _ => Future.successful(
+          Unauthorized(Json.obj(
+            "success" -> 1,
+            "message" -> "Time slot creation fails."
+          ))
+        )
+      }, 10.seconds)
+    }
   }
 
   // deleteTimeslot: staffs delete a timeslot
-  def deleteTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+  def deleteTimeslot(): Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     Future.successful(Ok(Json.toJson(
       Map("success" -> 0)
     )))
   }
 
   // editTimeslot: staffs edit a timeslot
-  def editTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+  def editTimeslot(): Action[AnyContent] = Action.async { request =>
+    val form = extractForm(request)
+    val slotID = form.getOrElse("slotID", Seq())
+    val status = form.getOrElse("status", Seq())
+    val vacancy = form.getOrElse("vacancy", Seq())
+    if (slotID.isEmpty) {
+      Future.successful(Unauthorized(Json.obj(
+        "success" -> 1,
+        "message" -> "Missing compulsory field: slotID."
+      )))
+    } else if (status.isEmpty && vacancy.isEmpty) {
+      Future.successful(Unauthorized(Json.obj(
+        "success" -> 1,
+        "message" -> "please at least specify the 'status' or 'vacancy' to be edited."
+      )))
+    } else {
+      val result = {
+        if (status.nonEmpty) model.updateATimeslot(slotID.head.toInt, status.head.toShort)
+        else model.updateVacancy(slotID.head.toInt, vacancy.head.toInt)
+      }
+      result.map{
+        case 0 => Ok(Json.obj(
+          "success" -> 0,
+          "message" -> s"Fail to find slot with id ${slotID.head.toInt}"))
+        case _ => Ok(Json.obj(
+          "success" -> 0,
+          "message" -> s"Updated slot ${slotID.head.toInt}."))
+      }
+    }
   }
 
   // markBookingStatus: staffs mark for booking records status
@@ -160,15 +235,26 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
 
   // current test: getUserInfo
   def test(): Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    val result = model.getUserInfo(1)
-    result.map[Result] {
-      case Some(user) => Ok(Json.obj(
-        "success" -> 0,
-        "user" -> user.toString
-      )).withSession("uid" -> request.session.get("uid").get)
-      case _ => Unauthorized(Json.obj(
-        "success" -> 1
-      ))
+    val form = extractForm(request)
+    val startAt = form.getOrElse("startAt", Seq())
+    val endAt = form.getOrElse("endAt", Seq())
+    if (startAt.isEmpty || endAt.isEmpty) {
+      Future.successful(Unauthorized(Json.obj(
+        "success" -> 1,
+        "message" -> "missing compulsory field: startAt or endAt (YYYY-MM-DD hh:mm:ss)."
+      )))
+    } else {
+      model.listTimeslots(Timestamp.valueOf(startAt.head), Timestamp.valueOf(endAt.head)).map{ r =>
+        if (r.nonEmpty) {
+          Ok(Json.obj(
+            "success" -> 0,
+            "slots" -> r.toString()))
+        } else {
+          Ok(Json.obj(
+            "success" -> 0,
+            "slots" -> "No available slots"))
+        }
+      }
     }
   }
 }

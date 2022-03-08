@@ -4,7 +4,7 @@
 # ~~~~
 
 # An example controller showing a sample home page
-GET     /testget                    controllers.HomeController.test()
+POST    /test                       controllers.HomeController.test()
 GET     /                           controllers.HomeController.index()
 PUT     /init                       controllers.HomeController.createTables()
 PUT     /insertSamples              controllers.HomeController.insertSamples()
@@ -15,6 +15,7 @@ POST    /book                       controllers.HomeController.bookTimeslot()
 POST    /cancel                     controllers.HomeController.cancelTimeslot()
 GET     /bookings                   controllers.HomeController.queryUserBookings()
 POST    /edit                       controllers.HomeController.editUserBooking()
+POST    /getslots                   controllers.HomeController.getTimeslots()
 POST    /addslot                    controllers.HomeController.addTimeslot()
 POST    /deleteslot                 controllers.HomeController.deleteTimeslot()
 POST    /editslot                   controllers.HomeController.editTimeslot()

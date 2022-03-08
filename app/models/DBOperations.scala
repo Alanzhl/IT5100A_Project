@@ -2,10 +2,11 @@ package models
 
 import slick.jdbc.PostgresProfile.api._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import models.Tables._
 
 import java.sql.Timestamp
+import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 
 
@@ -88,49 +89,113 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
 
   // create a new timeslot
   // return value: slot id / None
-  def createTimeslot(startAt: Timestamp, endAt: Timestamp, vacancy: Int = 50): Future[Option[Future[Int]]] = ???
+  def createTimeslot(startAt: Timestamp, endAt: Timestamp, vacancy: Int = 50): Future[Option[Future[Int]]] = {
+    val matches = db.run(slots.filter(s =>
+      (s.startAt <= startAt && s.endAt > startAt)
+        || (s.startAt < endAt && s.endAt >= endAt)).result)
+    matches.map { r => if (r.isEmpty) {
+        Some(db.run((slots returning slots.map(_.slotID)) += Slot(0, startAt, endAt, vacancy, 1)))
+      } else {
+        None
+      }
+    }
+  }
 
   // get a specific timeslot according to its start time
   // return value: detailed slot messages (slotID, startAt, endAt, vacancy, status)
-  def getATimeslot(startAt: Timestamp): Future[Option[(Int, Timestamp, Timestamp, Int, Short)]] = ???
+  def getATimeslot(startAt: Timestamp): Future[Option[Slot]] = {
+    db.run(slots.filter(s => s.startAt === startAt).result).map{_.headOption}
+  }
 
   // get the time slots between the interval [startAt, endAt]
   // return value: a list of detailed slot messages (slotID, startAt, endAt, vacancy, status)
-  def listTimeslots(startAt: Timestamp, endAt: Timestamp): Future[List[(Int, Timestamp, Timestamp, Int, Short)]] = ???
+  def listTimeslots(startAt: Timestamp, endAt: Timestamp): Future[Seq[Slot]] = {
+    db.run(slots.filter(s => s.startAt >= startAt && s.endAt <= endAt).result)
+  }
 
   // update the status of a time slot
-  // return value: current status of the slot
-  def updateATimeslot(slotID: Int, status: Short): Future[Short] = ???
+  // return value: number of affected rows (fail if it is 0)
+  def updateATimeslot(slotID: Int, status: Short): Future[Int] = {
+    val q = slots.filter(s => s.slotID === slotID).map(c => c.status)
+    db.run(q.update(status))
+  }
 
   // update the vacancy limit of a slot
   // return value: current limit of the slot / None (fail to change due exceeding bookings)
-  def updateVacancy(slotID: Int, vacancy: Int): Future[Option[Int]] = ???
+  def updateVacancy(slotID: Int, vacancy: Int): Future[Int] = {
+    val q = slots.filter(s => s.slotID === slotID).map(c => c.vacancy)
+    db.run(q.update(vacancy))
+  }
 
-  // book a slot
+  // book a slot (please ensure the user exists...)
   // return value: booking ID / None (not successful)
-  def bookASlot(userID: Int, slotID: Int): Future[Either[Future[Int], String]] = ???
+  def bookASlot(userID: Int, slotID: Int): Future[Either[Future[Int], String]] = {
+    db.run(bookings.filter(b => b.userID === userID && b.slotID === slotID).result).map(r1 => {
+      if (r1.nonEmpty) {
+        Right(s"User $userID has already booked slot $slotID.")
+      } else {
+        Await.result(db.run(slots.filter(s => s.slotID === slotID).result).map( r2 => {
+          if (r2.isEmpty) {
+            Right(s"Slot $slotID is empty!")
+          } else if (r2.head.status == 0) {
+            Right(s"Slot $slotID is closed!")
+          } else if (r2.head.vacancy == 0) {
+            Right(s"Slot $slotID is full!")
+          } else {
+            Left(db.run((bookings returning bookings.map(_.bookingID)) += Booking(0, 1, userID, slotID)))
+          }
+        }), 10.seconds)
+      }
+    })
+  }
 
   // delete a booking record
   // return value: the canceled booking ID / None
-  def cancelABooking(bookingID: Int): Future[Option[Int]] = ???
+  def cancelABooking(bookingID: Int): Future[Option[Int]] = {
+    db.run(bookings.filter(b => b.bookingID === bookingID).delete).map{
+      case 0 => None
+      case _ => Some(bookingID)
+    }
+  }
 
-  // add a new booking and delete the old one
+  // add a new booking and cancel the old one
   // return value: the new booking ID / booking failure messages
-  def updateABooking(bookingID: Int, userID: Int, slotID: Int): Future[Either[Future[Int], String]] = ???
+  def updateABooking(bookingID: Int, userID: Int, slotID: Int): Future[Either[Future[Int], String]] = {
+    bookASlot(userID, slotID).map{
+      case Left(bid) => Await.result(cancelABooking(bookingID).map{_ => Left(bid)}, 10.seconds)
+      case Right(info) => Right(info)
+    }
+  }
 
   // list all the bookings of a user
   // return value: a list of detailed booking messages (bookingID, status, userID, slotID, startAt, endAt)
-  def listBookingsByUser(userID: Int): Future[List[(Int, Short, Int, Int, Timestamp, Timestamp)]] = ???
+  def listBookingsByUser(userID: Int): Future[Seq[Booking]] = {
+    db.run(bookings.filter(b => b.userID === userID).result)
+  }
 
   // list all the bookings in a timeslot
   // return value: a list of detailed booking messages (bookingID, status, userID, slotID, startAt, endAt)
-  def listBookingsByTimeslot(slotID: Int): Future[List[(Int, Short, Int, Int, Timestamp, Timestamp)]] = ???
+  def listBookingsByTimeslot(slotID: Int): Future[Seq[Booking]] = {
+    db.run(bookings.filter(b => b.slotID === slotID).result)
+  }
 
   // mark a booking as "attended"
   // return value: bookingID / None (not exist)
-  def markBookingAttended(bookingID: Int): Future[Option[Int]] = ???
+  def markBookingAttended(bookingID: Int): Future[Option[Int]] = {
+    val q = bookings.filter(b => b.bookingID === bookingID).map(b => b.status)
+    db.run(q.update(2)).map{
+      case 0 => None
+      case _ => Some(bookingID)
+    }
+  }
 
   // mark a booking as "finished"
   // return value: bookingID / None (not exist)
-  def markBookingFinished(bookingID: Int): Future[Option[Int]] = ???
+  def markBookingFinished(bookingID: Int): Future[Option[Int]] = {
+    val q = bookings.filter(b => b.bookingID === bookingID).map(b => b.status)
+    db.run(q.update(3)).map{
+      case 0 => None
+      case _ => Some(bookingID)
+    }
+  }
 }

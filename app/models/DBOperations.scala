@@ -11,8 +11,8 @@ import scala.util.{Failure, Success}
 
 class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // initialize the schemas of tables
-  def init():Future[String] = {
-    db.run((slots.schema ++ users.schema ++ bookings.schema).create.asTry).map{
+  def init(): Future[String] = {
+    db.run((slots.schema ++ users.schema ++ bookings.schema).create.asTry).map {
       case Failure(e) => e.getMessage
       case Success(_) => "Tables initiated."
     }
@@ -39,7 +39,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
         Booking(4, 1, 2, 3),
         Booking(5, 1, 3, 4)
       )
-    ).asTry).map{
+    ).asTry).map {
       case Failure(e) => e.getMessage
       case Success(_) => "Inserted sample with 4 slots, 3 users and 5 bookings."
     }
@@ -67,15 +67,15 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // return value: number of user created / conflict message
   def createUser(name: String, identifier: String, email: String, password: String): Future[Either[Future[Int], String]] = {
     val matches = db.run(users.filter(u => u.identifier === identifier || u.email === email).result)
-    matches.map(u => if (u.isEmpty) {
-      Left(db.run(users += User(0, identifier, name, email, password)))    // handle count == 0 at the controller
-    } else {
-      if (u.head.identifier == identifier) {
-        Right(s"Matric number conflict with existing user ${u.head.userID}.")
-      } else {
-        Right(s"Email conflict with existing user ${u.head.userID}")
-      }
-    })
+    matches.map {
+      case head :: _ =>
+        if (head.identifier == identifier)
+          Right(s"Matric number conflict with existing user ${head.userID}.")
+        else
+          Right(s"Email conflict with existing user ${head.userID}")
+      // handle count == 0 at the controller
+      case _ => Left(db.run(users += User(0, identifier, name, email, password)))
+    }
   }
 
   // get detailed user info
@@ -88,7 +88,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
 
   // create a new timeslot
   // return value: slot id / None
-  def createTimeslot(startAt: Timestamp, endAt: Timestamp, vacancy: Int = 50):Future[Option[Future[Int]]] = ???
+  def createTimeslot(startAt: Timestamp, endAt: Timestamp, vacancy: Int = 50): Future[Option[Future[Int]]] = ???
 
   // get a specific timeslot according to its start time
   // return value: detailed slot messages (slotID, startAt, endAt, vacancy, status)

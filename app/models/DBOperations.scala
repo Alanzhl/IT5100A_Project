@@ -142,7 +142,8 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
           } else if (r2.head.vacancy == 0) {
             Right(s"Slot $slotID is full!")
           } else {
-            Left(db.run((bookings returning bookings.map(_.bookingID)) += Booking(0, 1, userID, slotID)))
+            Await.result(updateVacancy(slotID, r2.head.vacancy - 1).map(_ =>
+              Left(db.run((bookings returning bookings.map(_.bookingID)) += Booking(0, 1, userID, slotID)))), 10.seconds)
           }
         }), 10.seconds)
       }
@@ -152,10 +153,15 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // delete a booking record
   // return value: the canceled booking ID / None
   def cancelABooking(bookingID: Int): Future[Option[Int]] = {
-    db.run(bookings.filter(b => b.bookingID === bookingID).delete).map{
-      case 0 => None
-      case _ => Some(bookingID)
-    }
+    db.run(bookings.filter(b => b.bookingID === bookingID).result).map(r => {
+      if (r.isEmpty) None
+      else Await.result(db.run(bookings.filter(b => b.bookingID === bookingID).delete).map{
+        case 0 => None
+        case _ => Await.result(db.run(slots.filter(_.slotID === r.head.slotID).result.map{ s =>
+          updateVacancy(s.head.slotID, s.head.vacancy + 1).map{_ => Some(bookingID)}
+        }).flatten, 10.seconds)
+      }, 10.seconds)
+    })
   }
 
   // add a new booking and cancel the old one

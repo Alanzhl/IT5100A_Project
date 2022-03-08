@@ -2,6 +2,8 @@ package services
 
 import scala.concurrent.Future
 import models.DBOperations
+import java.sql.Timestamp
+import java.time
 
 class services(dbOperations: DBOperations) {
   def validateUserLogin(email: String, password: String): Future[Option[Int]] = {
@@ -16,5 +18,11 @@ class services(dbOperations: DBOperations) {
       case ("", _, _, _) | (_, "", _, _) | (_, _, "", _) | (_, _, _, "") => Future.successful(Right("Invalid request"))
       case _ => dbOperations.createUser(name, identifier, email, password)
     }
+  }
+
+  def getCurrentOpenSlots: Future[List[(Int, Timestamp, Timestamp, Int, Short)]] = {
+    dbOperations.listTimeslots(Timestamp.valueOf(time.LocalDateTime.now),
+      Timestamp.valueOf(time.LocalDateTime.now.plusWeeks(1))
+    )
   }
 }

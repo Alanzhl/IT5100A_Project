@@ -7,6 +7,7 @@ import play.api.mvc._
 import services._
 import slick.jdbc.JdbcProfile
 
+import java.sql.Timestamp
 import javax.inject._
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -34,9 +35,13 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
 
   // index: return a list of available time slots
   def index: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("uid" -> getUserSession(request))
-    )))
+    service.getCurrentOpenSlots.map[Result] {
+      case m: List[(Int, Timestamp, Int, Short)] => Ok(Json.obj(
+        "success" -> 0,
+        "slots" -> Json.arr(m)
+      ))
+      case _ => InternalServerError
+    }
   }
 
   def login: Action[AnyContent] = Action.async { request: Request[AnyContent] =>

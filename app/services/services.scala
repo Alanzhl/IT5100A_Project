@@ -62,4 +62,49 @@ class services(dbOperations: DBOperations) {
         }
     }
   }
+
+  def listBookingsByTimeslot(uid: Int, slotID: Int): Future[List[(Int, Short, Int, Int, Timestamp, Timestamp)]] = {
+    slotID match {
+      case -1 => Future.successful(List.empty[(Int, Short, Int, Int, Timestamp, Timestamp)])
+      case _ => dbOperations.listBookingsByTimeslot(slotID)
+    }
+  }
+
+  def createSlot(uid: Int, startAt: Timestamp, endAt: Timestamp, vacancy: Int): Future[Option[Future[Int]]] = {
+    if (vacancy < 0) {
+      Future.successful(Option[Future[Int]](Future.successful(0)))
+    } else {
+      dbOperations.createTimeslot(startAt, endAt, vacancy)
+    }
+  }
+
+  def closeTimeslot(uid: Int, slotID: Int): Future[Short] = {
+    slotID match {
+      case -1 => Future.successful(-1)
+      case _ => dbOperations.updateATimeslot(slotID, 0)
+    }
+  }
+
+  def editTimeslot(uid: Int, slotID: Int, vacancy: Int): Future[Option[Int]] = {
+    slotID match {
+      case -1 => Future.successful(Option[Int](-1))
+      case _ => dbOperations.updateVacancy(slotID, vacancy)
+    }
+  }
+
+  def markBooking(uid: Int, bookingID: Int, status: Short): Future[Option[Int]] = {
+    bookingID match {
+      case -1 => Future.successful(Option[Int](-1))
+      case _ =>
+        if (status == 2) {
+          dbOperations.markBookingAttended(bookingID)
+        } else {
+          dbOperations.markBookingFinished(bookingID)
+        }
+    }
+  }
+
+  def getSlotsInPeriod(uid: Int, startAt: Timestamp, endAt: Timestamp): Future[List[(Int, Timestamp, Timestamp, Int, Short)]] = {
+    dbOperations.listTimeslots(startAt, endAt)
+  }
 }

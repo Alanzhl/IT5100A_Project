@@ -23,14 +23,15 @@ class Tables {
   }
   lazy val slots = TableQuery[Slots]
 
-  case class User(userID:Int, identifier:String, name:String, email:String, password:String)
+  case class User(userID:Int, identifier:String, name:String, email:String, password:String, identity: Short)
   class Users(tag: Tag) extends Table[User](tag, "USERS") {
     def userID = column[Int]("user_id", O.AutoInc, O.PrimaryKey)
     def identifier = column[String]("identifier", O.Unique)
     def name = column[String]("name")
     def email = column[String]("email", O.Unique)
     def password = column[String]("password")
-    def * = (userID, identifier, name, email, password) <> (User.tupled, User.unapply)
+    def identity = column[Short]("identity")
+    def * = (userID, identifier, name, email, password, identity) <> (User.tupled, User.unapply)
   }
   lazy val users = TableQuery[Users]
 

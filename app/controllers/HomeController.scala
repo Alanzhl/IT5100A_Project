@@ -1,5 +1,6 @@
 package controllers
 
+import models.Tables._
 import models._
 import play.api.db.slick.{DatabaseConfigProvider, HasDatabaseConfigProvider}
 import play.api.libs.json.Json
@@ -9,9 +10,8 @@ import slick.jdbc.JdbcProfile
 
 import java.sql.Timestamp
 import javax.inject._
-import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Failure, Success}
+import scala.concurrent.{ExecutionContext, Future}
+
 
 @Singleton
 class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigProvider,
@@ -35,10 +35,14 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
 
 
   // index: return a list of available time slots
-  def index: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("uid" -> getUserSession(request))
-    )))
+  def index: Action[AnyContent] = Action.async { _ =>
+    service.getCurrentOpenSlots.map[Result] {
+      case m: Seq[Tables.Slot] => Ok(Json.obj(
+        "success" -> 0,
+        "slots" -> m.toString()
+      ))
+      case _ => InternalServerError
+    }
   }
 
   def login: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
@@ -49,7 +53,7 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
       case Some(uid) =>
         Ok(Json.obj(
           "success" -> 0
-        )).withSession(("uid" -> uid.toString))
+        )).withSession("uid" -> uid.toString)
       case _ =>
         Unauthorized(Json.obj(
           "success" -> 1,
@@ -58,7 +62,7 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     }
   }
 
-  def logout: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+  def logout: Action[AnyContent] = Action.async { _ =>
     Future.successful(Ok(Json.toJson(
       Map("success" -> 0)
     )).withNewSession)
@@ -70,14 +74,14 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val password = form.getOrElse("password", Seq("")).head
     val name = form.getOrElse("name", Seq("")).head
     val identifier = form.getOrElse("identifier", Seq("")).head
-    Await.result[Future[Result]](service.register(email, password, name, identifier).map[Future[Result]] {
+    service.register(email, password, name, identifier).map[Future[Result]] {
       case Right(e: String) =>
         Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
       case Left(r: Future[Int]) => r.map[Result] {
         case 1 => Ok(Json.obj("success" -> 0))
         case _ => BadRequest(Json.obj("success" -> 1))
       }
-    }, 10.seconds)
+    }.flatten
   }
 
   def getTimeslots: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
@@ -106,121 +110,139 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
 
   // bookTimeslot: user book a time slot
   def bookTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+    val uid = getUserSession(request)
+    val form = extractForm(request)
+    val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
+    (service.bookASlot(uid, slotID) map[Future[Result]] {
+      case Right(e: String) =>
+        Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
+      case Left(r: Future[Int]) => r.map[Result] {
+        case 1 => Ok(Json.obj("success" -> 0))
+        case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
+      }
+    }).flatten
   }
 
   // cancelTimeslot: user cancel a booking
   def cancelTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+    val uid = getUserSession(request)
+    val form = extractForm(request)
+    val slotID = form.getOrElse("bookingID", Seq("-1")).head.toInt
+    service.cancelBooking(uid, slotID) map[Result] {
+      case Some(1) => Ok(Json.obj("success" -> 0))
+      case Some(-1) =>
+        BadRequest(Json.obj("success" -> 1, "message" -> "Invalid Request"))
+      case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
+    }
   }
 
   //queryUserBookings: get user's current bookings
   def queryUserBookings: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+    val uid = getUserSession(request)
+    service.getUserBookings(uid) map[Result] {
+      case m: Seq[Booking] => Ok(Json.obj("success" -> 0, "bookings" -> m.toString()))
+      case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+    }
   }
 
   // editUserBooking: edit time slot for a booking
   def editUserBooking: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+    val form = extractForm(request)
+    val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
+    val bookingID = form.getOrElse("bookingID", Seq("-1")).head.toInt
+    val uid = getUserSession(request)
+    (service.editUserBooking(uid, bookingID, slotID) map[Future[Result]] {
+      case Right(e: String) =>
+        Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
+      case Left(r: Future[Int]) => r.map[Result] {
+        case 1 => Ok(Json.obj("success" -> 0))
+        case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
+      }
+    }).flatten
   }
 
   // queryBookingRecords: staffs query bookings in a time slot
   def queryBookingRecords: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
-  }
-
-  // addTimeslot: staffs add a timeslot
-  def addTimeslot(): Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     val form = extractForm(request)
-    val startAt = form.getOrElse("startAt", Seq())
-    val endAt = form.getOrElse("endAt", Seq())
-    val vacancy = form.getOrElse("vacancy", Seq("50"))
-    if (startAt.isEmpty || endAt.isEmpty) {
-      Future.successful(Unauthorized(Json.obj(
-        "success" -> 1,
-        "message" -> "missing compulsory field: startAt or endAt (YYYY-MM-DD hh:mm:ss)."
-      )))
-    } else {
-      val result = model.createTimeslot(
-        Timestamp.valueOf(startAt.head),
-        Timestamp.valueOf(endAt.head),
-        vacancy.head.toInt)
-      Await.result(result.map[Future[Result]] {
-        case Some(sidFuture) => sidFuture.map{sid =>
-          Ok(Json.obj(
-            "success" -> 0,
-            "slot_id" -> sid))}
-        case _ => Future.successful(
-          Unauthorized(Json.obj(
-            "success" -> 1,
-            "message" -> "Time slot creation fails."
-          ))
-        )
-      }, 10.seconds)
+    val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
+    val uid = getUserSession(request)
+    service.listBookingsByTimeslot(uid, slotID) map[Result] {
+      case m: Seq[Booking] => Ok(Json.obj("success" -> 0, "bookings" -> m.toString()))
+      case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
     }
   }
 
-  // deleteTimeslot: staffs delete a timeslot
-  def deleteTimeslot(): Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+  // createTimeslot: staffs add a timeslot
+  def createTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+    val form = extractForm(request)
+    val uid = getUserSession(request)
+    val starAt = Timestamp.valueOf(form.getOrElse("starAt", Seq("-1")).head)
+    val endAt = Timestamp.valueOf(form.getOrElse("endAt", Seq("-1")).head)
+    val vacancy = form.getOrElse("vacancy", Seq("-1")).head.toInt
+
+    (service.createSlot(uid, starAt, endAt, vacancy) map[Future[Result]] {
+      case Some(r: Future[Int]) => r map[Result] {
+        case 1 => Ok(Json.obj("success" -> 0))
+        case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
+      }
+      case _ =>
+        Future.successful(
+          InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+        )
+    }).flatten
+  }
+
+  // closeTimeslot: staffs delete a timeslot
+  def closeTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+    val form = extractForm(request)
+    val uid = getUserSession(request)
+    val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
+    service.closeTimeslot(uid, slotID) map[Result] {
+      case 0 => Ok(Json.toJson(
+        Map("success" -> 0)
+      ))
+      case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+    }
   }
 
   // editTimeslot: staffs edit a timeslot
-  def editTimeslot(): Action[AnyContent] = Action.async { request =>
+  def editTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     val form = extractForm(request)
-    val slotID = form.getOrElse("slotID", Seq())
-    val status = form.getOrElse("status", Seq())
-    val vacancy = form.getOrElse("vacancy", Seq())
-    if (slotID.isEmpty) {
-      Future.successful(Unauthorized(Json.obj(
-        "success" -> 1,
-        "message" -> "Missing compulsory field: slotID."
-      )))
-    } else if (status.isEmpty && vacancy.isEmpty) {
-      Future.successful(Unauthorized(Json.obj(
-        "success" -> 1,
-        "message" -> "please at least specify the 'status' or 'vacancy' to be edited."
-      )))
-    } else {
-      val result = {
-        if (status.nonEmpty) model.updateATimeslot(slotID.head.toInt, status.head.toShort)
-        else model.updateVacancy(slotID.head.toInt, vacancy.head.toInt)
-      }
-      result.map{
-        case 0 => Ok(Json.obj(
-          "success" -> 0,
-          "message" -> s"Fail to find slot with id ${slotID.head.toInt}"))
-        case _ => Ok(Json.obj(
-          "success" -> 0,
-          "message" -> s"Updated slot ${slotID.head.toInt}."))
-      }
+    val vacancy = form.getOrElse("vacancy", Seq("-1")).head.toInt
+    val uid = getUserSession(request)
+    val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
+    service.editTimeslot(uid, slotID, vacancy) map[Result] {
+      case -1 => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+      case _ => Ok(Json.toJson(
+        Map("success" -> 0)
+      ))
     }
   }
 
   // markBookingStatus: staffs mark for booking records status
   def markBookingStatus: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+    val form = extractForm(request)
+    val status = form.getOrElse("status", Seq("-1")).head.toShort
+    val uid = getUserSession(request)
+    val bookingID = form.getOrElse("bookingID", Seq("-1")).head.toInt
+    service.markBooking(uid, bookingID, status) map[Result] {
+      case Some(r: Int) if r >= 0 => Ok(Json.toJson(
+        Map("success" -> 0)
+      ))
+      case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+    }
   }
 
-  // getStatistics: staffs get statistics of bookings in a week
-  def getStatistics: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+  // getSlotsInPeriod: list all time slots in a specific time period for staffs
+  def getSlotsInPeriod: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+    val form = extractForm(request)
+    val endAt = Timestamp.valueOf(form.getOrElse("endAt", Seq("-1")).head)
+    val starAt = Timestamp.valueOf(form.getOrElse("starAt", Seq("-1")).head)
+    val uid = getUserSession(request)
+    service.getSlotsInPeriod(uid, starAt, endAt) map[Result] {
+      case m: Seq[Slot] => Ok(Json.obj("success" -> 0, "slots" -> m.toString()))
+      case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+    }
   }
 
   // initialize the schemas of tables

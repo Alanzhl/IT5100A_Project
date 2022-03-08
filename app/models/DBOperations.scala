@@ -29,9 +29,9 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
         Slot(4, Timestamp.valueOf("2022-02-16 19:00:00"), Timestamp.valueOf("2022-02-16 21:00:00"), 15, 1)
       ),
       users ++= Seq(
-        User(1, "A0123456B", "John Doe", "johndoe@u.nus.edu", "user1pw"),
-        User(2, "A4567890W", "Rolph Hatwells", "rhatwells1@hhs.gov", "user2pw"),
-        User(3, "A0234587Y", "Olive Yew", "yeosw@u.nus.edu", "user3pw")
+        User(1, "A0123456B", "John Doe", "johndoe@u.nus.edu", "user1pw", 1),
+        User(2, "A4567890W", "Rolph Hatwells", "rhatwells1@hhs.gov", "user2pw", 0),
+        User(3, "A0234587Y", "Olive Yew", "yeosw@u.nus.edu", "user3pw", 1)
       ),
       bookings ++= Seq(
         Booking(1, 3, 1, 2),
@@ -66,16 +66,16 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
 
   // create a new user
   // return value: number of user created / conflict message
-  def createUser(name: String, identifier: String, email: String, password: String): Future[Either[Future[Int], String]] = {
+  def createUser(name: String, identifier: String, email: String, password: String, identity: Short = 1): Future[Either[Future[Int], String]] = {
     val matches = db.run(users.filter(u => u.identifier === identifier || u.email === email).result)
     matches.map {
-      case head :: _ =>
+      case head +: _ =>
         if (head.identifier == identifier)
           Right(s"Matric number conflict with existing user ${head.userID}.")
         else
           Right(s"Email conflict with existing user ${head.userID}")
       // handle count == 0 at the controller
-      case _ => Left(db.run(users += User(0, identifier, name, email, password)))
+      case _ => Left(db.run(users += User(0, identifier, name, email, password, identity)))
     }
   }
 
@@ -171,6 +171,12 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // return value: a list of detailed booking messages (bookingID, status, userID, slotID, startAt, endAt)
   def listBookingsByUser(userID: Int): Future[Seq[Booking]] = {
     db.run(bookings.filter(b => b.userID === userID).result)
+  }
+
+  // check if a booking created by a user
+  // return value: true or false
+  def checkBookingOfUser(userID: Int, bookingID: Int): Future[Boolean] = {
+    db.run(bookings.filter(b => b.bookingID === bookingID && b.userID === userID).result).map{_.nonEmpty}
   }
 
   // list all the bookings in a timeslot

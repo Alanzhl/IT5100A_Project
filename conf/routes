@@ -4,6 +4,7 @@
 # ~~~~
 
 # An example controller showing a sample home page
+<<<<<<< HEAD
 POST    /test                       controllers.HomeController.test()
 GET     /                           controllers.HomeController.index()
 PUT     /init                       controllers.HomeController.createTables()
@@ -21,3 +22,20 @@ POST    /deleteslot                 controllers.HomeController.deleteTimeslot()
 POST    /editslot                   controllers.HomeController.editTimeslot()
 POST    /markstatus                 controllers.HomeController.markBookingStatus()
 GET     /statistics                 controllers.HomeController.getStatistics()
+=======
+GET         /                      controllers.HomeController.index()
+PUT         /init                  controllers.HomeController.createTables()
+PUT         /insertSamples         controllers.HomeController.insertSamples()
+POST        /login                 controllers.HomeController.login()
+GET         /logout                controllers.HomeController.logout()
+POST        /register              controllers.HomeController.register()
+POST        /book                  controllers.HomeController.bookTimeslot()
+POST        /cancel                controllers.HomeController.cancelTimeslot()
+GET         /bookings              controllers.HomeController.queryUserBookings()
+POST        /edit                  controllers.HomeController.editUserBooking()
+POST        /addslot               controllers.HomeController.createTimeslot()
+POST        /closeslot             controllers.HomeController.closeTimeslot()
+POST        /editslot              controllers.HomeController.editTimeslot()
+POST        /markstatus            controllers.HomeController.markBookingStatus()
+POST        /slotssinperiod        controllers.HomeController.getSlotsInPeriod()
+>>>>>>> 13176b4713fffbf9055f5fa01c52767dbb9f5e71

@@ -5,7 +5,6 @@ import play.api.db.slick.{DatabaseConfigProvider, HasDatabaseConfigProvider}
 import play.api.mvc._
 import play.api.libs.json.Json
 import slick.jdbc.JdbcProfile
-import slick.jdbc.PostgresProfile.api._
 
 import scala.concurrent.ExecutionContext
 
@@ -28,15 +27,23 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
   }
 
   def login: Action[AnyContent] = Action { request: Request[AnyContent] =>
-    Ok(Json.toJson(
-      Map("success" -> 0)
-    ))
+    val form = request.body.asFormUrlEncoded match {
+      case Some(m: Map[String, Seq[String]]) => m
+      case _ => Map.empty[String, Seq[String]]
+    }
+    val username = form.getOrElse("username", Seq("")).head
+    val password = form.getOrElse("password", Seq("")).head
+    // TODO: login logic
+    Ok(Json.obj(
+      "success" -> 0,
+      "username" -> username
+    )).withSession(("username" -> username))
   }
 
   def logout: Action[AnyContent] = Action { request: Request[AnyContent] =>
     Ok(Json.toJson(
       Map("success" -> 0)
-    ))
+    )).withNewSession
   }
 
   def register: Action[AnyContent] = Action { request: Request[AnyContent] =>
@@ -79,30 +86,35 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
       Map("success" -> 0)
     ))
   }
+
   // addTimeslot: staffs add a timeslot
   def addTimeslot: Action[AnyContent] = Action { request: Request[AnyContent] =>
     Ok(Json.toJson(
       Map("success" -> 0)
     ))
   }
+
   // deleteTimeslot: staffs delete a timeslot
   def deleteTimeslot: Action[AnyContent] = Action { request: Request[AnyContent] =>
     Ok(Json.toJson(
       Map("success" -> 0)
     ))
   }
+
   // editTimeslot: staffs edit a timeslot
   def editTimeslot: Action[AnyContent] = Action { request: Request[AnyContent] =>
     Ok(Json.toJson(
       Map("success" -> 0)
     ))
   }
+
   // markBookingStatus: staffs mark for booking records status
   def markBookingStatus: Action[AnyContent] = Action { request: Request[AnyContent] =>
     Ok(Json.toJson(
       Map("success" -> 0)
     ))
   }
+
   // getStatistics: staffs get statistics of bookings in a week
   def getStatistics: Action[AnyContent] = Action { request: Request[AnyContent] =>
     Ok(Json.toJson(

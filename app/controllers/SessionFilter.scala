@@ -13,7 +13,8 @@ class SessionFilter @Inject()(implicit val mat: Materializer) extends Filter {
     // If not logged in or at login page
     if (requestHeader.session.get("uid").isEmpty
         && !(requestHeader.path.equals("/login")
-        || requestHeader.path.equals("/test")    // for testing purpose
+        || requestHeader.path.equals("/init")
+        || requestHeader.path.equals("/insertSamples")
         || requestHeader.path.equals("/register"))) {
       Future.successful(Results.Unauthorized)
     } else {

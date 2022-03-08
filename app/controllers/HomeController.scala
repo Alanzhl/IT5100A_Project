@@ -117,22 +117,20 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
       case Right(e: String) =>
         Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
       case Left(r: Future[Int]) => r.map[Result] {
-        case 1 => Ok(Json.obj("success" -> 0))
-        case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
+        bid => Ok(Json.obj("success" -> 0, "bookingID" -> bid))
       }
     }).flatten
   }
 
-  // cancelTimeslot: user cancel a booking
-  def cancelTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+  // cancelBooking: user cancel a booking
+  def cancelBooking: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     val uid = getUserSession(request)
     val form = extractForm(request)
     val slotID = form.getOrElse("bookingID", Seq("-1")).head.toInt
     service.cancelBooking(uid, slotID) map[Result] {
-      case Some(1) => Ok(Json.obj("success" -> 0))
-      case Some(-1) =>
+      case None =>
         BadRequest(Json.obj("success" -> 1, "message" -> "Invalid Request"))
-      case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
+      case Some(bid) => Ok(Json.obj("success" -> 0, "bookingID" -> bid))
     }
   }
 
@@ -154,15 +152,12 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     (service.editUserBooking(uid, bookingID, slotID) map[Future[Result]] {
       case Right(e: String) =>
         Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
-      case Left(r: Future[Int]) => r.map[Result] {
-        case 1 => Ok(Json.obj("success" -> 0))
-        case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
-      }
+      case Left(r: Future[Int]) => r.map[Result] {_ => Ok(Json.obj("success" -> 0))}
     }).flatten
   }
 
   // queryBookingRecords: staffs query bookings in a time slot
-  def queryBookingRecords: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
+  def queryBookingRecords(): Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     val form = extractForm(request)
     val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
     val uid = getUserSession(request)
@@ -171,6 +166,8 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
       case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
     }
   }
+
+  // TODO: THE FOLLOWING METHODS ARE NOT TESTED
 
   // createTimeslot: staffs add a timeslot
   def createTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>

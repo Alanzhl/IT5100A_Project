@@ -6,7 +6,6 @@ import models.DBOperations
 import models.Tables._
 
 import java.sql.Timestamp
-import java.time
 
 class services(dbOperations: DBOperations) {
   def validateUserLogin(email: String, password: String): Future[Option[Int]] = {
@@ -24,8 +23,8 @@ class services(dbOperations: DBOperations) {
   }
 
   def getCurrentOpenSlots: Future[Seq[Slot]] = {
-    dbOperations.listTimeslots(Timestamp.valueOf(time.LocalDateTime.now),
-      Timestamp.valueOf(time.LocalDateTime.now.plusWeeks(1))
+    dbOperations.listTimeslots(Timestamp.valueOf("2022-02-16 9:0:0"),
+      Timestamp.valueOf("2022-02-17 9:0:0")
     )
   }
 
@@ -38,12 +37,12 @@ class services(dbOperations: DBOperations) {
 
   def cancelBooking(uid: Int, bookingID: Int): Future[Option[Int]] = {
     bookingID match {
-      case -1 => Future.successful(Option[Int](-1))
+      case -1 => Future.successful(None)
       case _ =>
         if (Await.result(dbOperations.checkBookingOfUser(uid, bookingID), 10.seconds)) {
           dbOperations.cancelABooking(bookingID)
         } else {
-          Future.successful(Option[Int](-1))
+          Future.successful(None)
         }
     }
   }
@@ -66,7 +65,7 @@ class services(dbOperations: DBOperations) {
 
   def listBookingsByTimeslot(uid: Int, slotID: Int): Future[Seq[Booking]] = {
     slotID match {
-      case -1 => Future.successful(List.empty[Booking])
+      case -1 => Future.successful(Vector.empty[Booking])
       case _ => dbOperations.listBookingsByTimeslot(slotID)
     }
   }

@@ -6,36 +6,43 @@ import scala.concurrent.{ExecutionContext, Future}
 import models.Tables._
 
 import java.sql.Timestamp
+import scala.util.{Failure, Success}
 
 
 class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // initialize the schemas of tables
-  def init():Future[Unit] = {
-    db.run((slots.schema ++ users.schema ++ bookings.schema).createIfNotExists)
+  def init():Future[String] = {
+    db.run((slots.schema ++ users.schema ++ bookings.schema).create.asTry).map{
+      case Failure(e) => e.getMessage
+      case Success(_) => "Tables initiated."
+    }
   }
 
   // (one-time insertion) insert sample data to the tables for testing purpose
-  def insertSamples(): Future[Unit] = {
+  def insertSamples(): Future[String] = {
     db.run(DBIO.seq(
       slots ++= Seq(
-        (1, Timestamp.valueOf("2022-02-16 13:00:00"), Timestamp.valueOf("2022-02-16 15:00:00"), 19, 1),
-        (2, Timestamp.valueOf("2022-02-16 15:00:00"), Timestamp.valueOf("2022-02-16 17:00:00"), 6, 1),
-        (3, Timestamp.valueOf("2022-02-16 17:00:00"), Timestamp.valueOf("2022-02-16 19:00:00"), 0, 2),
-        (4, Timestamp.valueOf("2022-02-16 19:00:00"), Timestamp.valueOf("2022-02-16 21:00:00"), 15, 1)
+        Slot(1, Timestamp.valueOf("2022-02-16 13:00:00"), Timestamp.valueOf("2022-02-16 15:00:00"), 19, 1),
+        Slot(2, Timestamp.valueOf("2022-02-16 15:00:00"), Timestamp.valueOf("2022-02-16 17:00:00"), 6, 1),
+        Slot(3, Timestamp.valueOf("2022-02-16 17:00:00"), Timestamp.valueOf("2022-02-16 19:00:00"), 0, 2),
+        Slot(4, Timestamp.valueOf("2022-02-16 19:00:00"), Timestamp.valueOf("2022-02-16 21:00:00"), 15, 1)
       ),
       users ++= Seq(
-        (1, "A0123456B", "John Doe", "johndoe@u.nus.edu", "user1pw"),
-        (2, "A4567890W", "Rolph Hatwells", "rhatwells1@hhs.gov", "user2pw"),
-        (3, "A0234587Y", "Olive Yew", "yeosw@u.nus.edu", "user3pw")
+        User(1, "A0123456B", "John Doe", "johndoe@u.nus.edu", "user1pw"),
+        User(2, "A4567890W", "Rolph Hatwells", "rhatwells1@hhs.gov", "user2pw"),
+        User(3, "A0234587Y", "Olive Yew", "yeosw@u.nus.edu", "user3pw")
       ),
       bookings ++= Seq(
-        (1, 3, 1, 2),
-        (2, 2, 1, 3),
-        (3, 0, 2, 1),
-        (4, 1, 2, 3),
-        (5, 1, 3, 4)
+        Booking(1, 3, 1, 2),
+        Booking(2, 2, 1, 3),
+        Booking(3, 0, 2, 1),
+        Booking(4, 1, 2, 3),
+        Booking(5, 1, 3, 4)
       )
-    ))
+    ).asTry).map{
+      case Failure(e) => e.getMessage
+      case Success(_) => "Inserted sample with 4 slots, 3 users and 5 bookings."
+    }
   }
 
   // validate user by his matriculation number
@@ -43,7 +50,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   def validateUserByID(id: Int, password: String): Future[Option[Int]] = {
     val matches = db.run(users.filter(u => u.userID === id && u.password === password).result)
     matches.map(u =>
-      if (u.isEmpty) Some(u.head._1)
+      if (u.nonEmpty) Some(u.head.userID)
       else None)
   }
 
@@ -52,7 +59,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   def validateUserByEmail(email: String, password: String): Future[Option[Int]] = {
     val matches = db.run(users.filter(u => u.email === email && u.password === password).result)
     matches.map(u =>
-      if (u.isEmpty) Some(u.head._1)
+      if (u.nonEmpty) Some(u.head.userID)
       else None)
   }
 
@@ -60,12 +67,12 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // return value: number of user created / conflict message
   def createUser(name: String, identifier: String, email: String, password: String): Future[Either[Future[Int], String]] = {
     val matches = db.run(users.filter(u => u.identifier === identifier || u.email === email).result)
-    matches.map(u => if (u.head._2 == identifier) {
-      Right(s"Matric number conflict with existing user ${u.head._1}.")
-    } else if (u.head._4 == email) {
-      Right(s"Email conflict with existing user ${u.head._4}")
+    matches.map(u => if (u.head.identifier == identifier) {
+      Right(s"Matric number conflict with existing user ${u.head.userID}.")
+    } else if (u.head.email == email) {
+      Right(s"Email conflict with existing user ${u.head.userID}")
     } else {
-      Left(db.run(users += (0, identifier, name, email, password)))    // handle count == 0 at the controller
+      Left(db.run(users += User(0, identifier, name, email, password)))    // handle count == 0 at the controller
     })
   }
 

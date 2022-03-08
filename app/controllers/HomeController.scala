@@ -9,8 +9,7 @@ import slick.jdbc.JdbcProfile
 
 import java.sql.Timestamp
 import javax.inject._
-import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
 class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigProvider,
@@ -73,28 +72,44 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val password = form.getOrElse("password", Seq("")).head
     val name = form.getOrElse("name", Seq("")).head
     val identifier = form.getOrElse("identifier", Seq("")).head
-    Await.result[Future[Result]](service.register(email, password, name, identifier).map[Future[Result]] {
+    (service.register(email, password, name, identifier).map[Future[Result]] {
       case Right(e: String) =>
         Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
       case Left(r: Future[Int]) => r.map[Result] {
         case 1 => Ok(Json.obj("success" -> 0))
         case _ => BadRequest(Json.obj("success" -> 1))
       }
-    }, 10.seconds)
+    }).flatten
   }
 
   // bookTimeslot: user book a time slot
   def bookTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+    val uid = getUserSession(request)
+    val form = extractForm(request)
+    val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
+    (service.bookASlot(uid, slotID) map[Future[Result]] {
+      case Right("Invalid Request") =>
+        Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> "Invalid Request")))
+      case Right(e: String) =>
+        Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
+      case Left(r: Future[Int]) => r.map[Result] {
+        case 1 => Ok(Json.obj("success" -> 0))
+        case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
+      }
+    }).flatten
   }
 
   // cancelTimeslot: user cancel a booking
   def cancelTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+    val uid = getUserSession(request)
+    val form = extractForm(request)
+    val slotID = form.getOrElse("bookingID", Seq("-1")).head.toInt
+    service.cancelBooking(uid, slotID) match {
+      case 1 => Future.successful(Ok(Json.obj("success" -> 0)))
+      case -1 =>
+        Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> "Invalid Request")))
+      case _ => Future.successful(Ok(Json.obj("success" -> 1, "message" -> "Failed")))
+    }
   }
 
   //queryUserBookings: get user's current bookings

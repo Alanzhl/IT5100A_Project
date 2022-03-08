@@ -119,6 +119,10 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // return value: a list of detailed booking messages (bookingID, status, userID, slotID, startAt, endAt)
   def listBookingsByUser(userID: Int): Future[List[(Int, Short, Int, Int, Timestamp, Timestamp)]] = ???
 
+  // check if a booking created by a user
+  // return value: true or false
+  def checkBookingOfUser(userID: Int, bookingID: Int): Future[Boolean] = ???
+
   // list all the bookings in a timeslot
   // return value: a list of detailed booking messages (bookingID, status, userID, slotID, startAt, endAt)
   def listBookingsByTimeslot(slotID: Int): Future[List[(Int, Short, Int, Int, Timestamp, Timestamp)]] = ???

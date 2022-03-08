@@ -46,4 +46,20 @@ class services(dbOperations: DBOperations) {
         }
     }
   }
+
+  def getUserBookings(uid: Int): Future[List[(Int, Short, Int, Int, Timestamp, Timestamp)]] = {
+    dbOperations.listBookingsByUser(uid)
+  }
+
+  def editUserBooking(uid: Int, bookingID: Int, slotID: Int): Future[Either[Future[Int], String]] = {
+    (uid, bookingID, slotID) match {
+      case (_, -1, _) | (_, _, -1) => Future.successful(Right("Invalid request"))
+      case _ =>
+        if (Await.result(dbOperations.checkBookingOfUser(uid, bookingID), 10.seconds)) {
+          dbOperations.updateABooking(bookingID, uid, slotID)
+        } else {
+          Future.successful(Right("Permission denied"))
+        }
+    }
+  }
 }

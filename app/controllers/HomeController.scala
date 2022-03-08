@@ -88,8 +88,6 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val form = extractForm(request)
     val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
     (service.bookASlot(uid, slotID) map[Future[Result]] {
-      case Right("Invalid Request") =>
-        Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> "Invalid Request")))
       case Right(e: String) =>
         Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
       case Left(r: Future[Int]) => r.map[Result] {
@@ -104,26 +102,37 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val uid = getUserSession(request)
     val form = extractForm(request)
     val slotID = form.getOrElse("bookingID", Seq("-1")).head.toInt
-    service.cancelBooking(uid, slotID) match {
-      case 1 => Future.successful(Ok(Json.obj("success" -> 0)))
-      case -1 =>
-        Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> "Invalid Request")))
-      case _ => Future.successful(Ok(Json.obj("success" -> 1, "message" -> "Failed")))
+    service.cancelBooking(uid, slotID) map[Result] {
+      case Some(1) => Ok(Json.obj("success" -> 0))
+      case Some(-1) =>
+        BadRequest(Json.obj("success" -> 1, "message" -> "Invalid Request"))
+      case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
     }
   }
 
   //queryUserBookings: get user's current bookings
   def queryUserBookings: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+    val uid = getUserSession(request)
+    service.getUserBookings(uid) map[Result] {
+      case m: List[Any] => Ok(Json.obj("success" -> 0, "bookings" -> Json.arr(m)))
+      case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+    }
   }
 
   // editUserBooking: edit time slot for a booking
   def editUserBooking: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    Future.successful(Ok(Json.toJson(
-      Map("success" -> 0)
-    )))
+    val form = extractForm(request)
+    val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
+    val bookingID = form.getOrElse("bookingID", Seq("-1")).head.toInt
+    val uid = getUserSession(request)
+    (service.editUserBooking(uid, bookingID, slotID) map[Future[Result]] {
+      case Right(e: String) =>
+        Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
+      case Left(r: Future[Int]) => r.map[Result] {
+        case 1 => Ok(Json.obj("success" -> 0))
+        case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
+      }
+    }).flatten
   }
 
   // queryBookingRecords: staffs query bookings in a time slot

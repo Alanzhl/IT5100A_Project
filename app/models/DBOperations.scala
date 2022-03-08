@@ -68,7 +68,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   def createUser(name: String, identifier: String, email: String, password: String): Future[Either[Future[Int], String]] = {
     val matches = db.run(users.filter(u => u.identifier === identifier || u.email === email).result)
     matches.map {
-      case head :: _ =>
+      case head +: _ =>
         if (head.identifier == identifier)
           Right(s"Matric number conflict with existing user ${head.userID}.")
         else

@@ -3,6 +3,7 @@ package services
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import models.DBOperations
+import models.Tables._
 
 import java.sql.Timestamp
 import java.time
@@ -22,7 +23,7 @@ class services(dbOperations: DBOperations) {
     }
   }
 
-  def getCurrentOpenSlots: Future[List[(Int, Timestamp, Timestamp, Int, Short)]] = {
+  def getCurrentOpenSlots: Future[Seq[Slot]] = {
     dbOperations.listTimeslots(Timestamp.valueOf(time.LocalDateTime.now),
       Timestamp.valueOf(time.LocalDateTime.now.plusWeeks(1))
     )
@@ -47,7 +48,7 @@ class services(dbOperations: DBOperations) {
     }
   }
 
-  def getUserBookings(uid: Int): Future[List[(Int, Short, Int, Int, Timestamp, Timestamp)]] = {
+  def getUserBookings(uid: Int): Future[Seq[Booking]] = {
     dbOperations.listBookingsByUser(uid)
   }
 
@@ -63,9 +64,9 @@ class services(dbOperations: DBOperations) {
     }
   }
 
-  def listBookingsByTimeslot(uid: Int, slotID: Int): Future[List[(Int, Short, Int, Int, Timestamp, Timestamp)]] = {
+  def listBookingsByTimeslot(uid: Int, slotID: Int): Future[Seq[Booking]] = {
     slotID match {
-      case -1 => Future.successful(List.empty[(Int, Short, Int, Int, Timestamp, Timestamp)])
+      case -1 => Future.successful(List.empty[Booking])
       case _ => dbOperations.listBookingsByTimeslot(slotID)
     }
   }
@@ -78,16 +79,16 @@ class services(dbOperations: DBOperations) {
     }
   }
 
-  def closeTimeslot(uid: Int, slotID: Int): Future[Short] = {
+  def closeTimeslot(uid: Int, slotID: Int): Future[Int] = {
     slotID match {
       case -1 => Future.successful(-1)
       case _ => dbOperations.updateATimeslot(slotID, 0)
     }
   }
 
-  def editTimeslot(uid: Int, slotID: Int, vacancy: Int): Future[Option[Int]] = {
+  def editTimeslot(uid: Int, slotID: Int, vacancy: Int): Future[Int] = {
     slotID match {
-      case -1 => Future.successful(Option[Int](-1))
+      case -1 => Future.successful(-1)
       case _ => dbOperations.updateVacancy(slotID, vacancy)
     }
   }
@@ -104,7 +105,7 @@ class services(dbOperations: DBOperations) {
     }
   }
 
-  def getSlotsInPeriod(uid: Int, startAt: Timestamp, endAt: Timestamp): Future[List[(Int, Timestamp, Timestamp, Int, Short)]] = {
+  def getSlotsInPeriod(uid: Int, startAt: Timestamp, endAt: Timestamp): Future[Seq[Slot]] = {
     dbOperations.listTimeslots(startAt, endAt)
   }
 }

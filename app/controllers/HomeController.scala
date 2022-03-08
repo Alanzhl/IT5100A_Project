@@ -112,11 +112,11 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
 
   // initialize the schemas of tables
   def createTables: Action[AnyContent] = Action.async { _ =>
-    model.init().map(_ => Ok("Tables initiated."))
+    model.init().map(info => Ok(info))
   }
 
   // (one-time insertion) insert sample data to the tables for testing purpose
   def insertSamples(): Action[AnyContent] = Action.async { _ =>
-    model.insertSamples().map(_ => Ok("Inserted sample with 4 slots, 3 users and 5 bookings."))
+    model.insertSamples().map(info => Ok(info))
   }
 }

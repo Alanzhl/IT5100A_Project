@@ -3,7 +3,7 @@ package controllers
 import models.Tables._
 import models._
 import play.api.db.slick.{DatabaseConfigProvider, HasDatabaseConfigProvider}
-import play.api.libs.json.Json
+import play.api.libs.json.{JsValue, Json}
 import play.api.mvc._
 import services._
 import slick.jdbc.JdbcProfile
@@ -33,14 +33,30 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     request.session.get("uid").get.toInt
   }
 
+  private def slotsJson(m: Seq[Slot]): JsValue = {
+    Json.toJson(m.map(slot =>
+      Json.obj(
+        "id" -> slot.slotID,
+        "start" -> slot.startAt,
+        "end" -> slot.endAt,
+        "vacancy" -> slot.vacancy,
+        "status" -> slot.status
+      )))
+  }
+
+  private def bookingJson(m: Seq[Booking]): JsValue = {
+    Json.toJson(m.map(booking => Json.obj(
+      "id" -> booking.bookingID,
+      "user_id" -> booking.userID,
+      "slot_id" -> booking.slotID,
+      "status" -> booking.status
+    )))
+  }
 
   // index: return a list of available time slots
   def index: Action[AnyContent] = Action.async { _ =>
-    service.getCurrentOpenSlots.map[Result] {
-      case m: Seq[Tables.Slot] => Ok(Json.obj(
-        "success" -> 0,
-        "slots" -> m.toString()
-      ))
+    service.getCurrentOpenSlots map[Result] {
+      case m: Seq[Tables.Slot] => Ok(Json.obj("success" -> 0, "slots" -> slotsJson(m)))
       case _ => InternalServerError
     }
   }
@@ -84,30 +100,6 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     }.flatten
   }
 
-  def getTimeslots: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    val form = extractForm(request)
-    val startAt = form.getOrElse("startAt", Seq())
-    val endAt = form.getOrElse("endAt", Seq())
-    if (startAt.isEmpty || endAt.isEmpty) {
-      Future.successful(Unauthorized(Json.obj(
-        "success" -> 1,
-        "message" -> "missing compulsory field: startAt or endAt (YYYY-MM-DD hh:mm:ss)."
-      )))
-    } else {
-      model.listTimeslots(Timestamp.valueOf(startAt.head), Timestamp.valueOf(endAt.head)).map{ r =>
-        if (r.nonEmpty) {
-          Ok(Json.obj(
-            "success" -> 0,
-            "slots" -> r.toString()))
-        } else {
-          Ok(Json.obj(
-            "success" -> 0,
-            "slots" -> "No available slots"))
-        }
-      }
-    }
-  }
-
   // bookTimeslot: user book a time slot
   def bookTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     val uid = getUserSession(request)
@@ -138,7 +130,7 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
   def queryUserBookings: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     val uid = getUserSession(request)
     service.getUserBookings(uid) map[Result] {
-      case m: Seq[Booking] => Ok(Json.obj("success" -> 0, "bookings" -> m.toString()))
+      case m: Seq[Booking] => Ok(Json.obj("success" -> 0, "bookings" -> bookingJson(m)))
       case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
     }
   }
@@ -152,7 +144,7 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     (service.editUserBooking(uid, bookingID, slotID) map[Future[Result]] {
       case Right(e: String) =>
         Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
-      case Left(r: Future[Int]) => r.map[Result] {_ => Ok(Json.obj("success" -> 0))}
+      case Left(r: Future[Int]) => r.map[Result] { _ => Ok(Json.obj("success" -> 0)) }
     }).flatten
   }
 
@@ -162,7 +154,7 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
     val uid = getUserSession(request)
     service.listBookingsByTimeslot(uid, slotID) map[Result] {
-      case m: Seq[Booking] => Ok(Json.obj("success" -> 0, "bookings" -> m.toString()))
+      case m: Seq[Booking] => Ok(Json.obj("success" -> 0, "bookings" -> bookingJson(m)))
       case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
     }
   }
@@ -237,7 +229,10 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val starAt = Timestamp.valueOf(form.getOrElse("starAt", Seq("-1")).head)
     val uid = getUserSession(request)
     service.getSlotsInPeriod(uid, starAt, endAt) map[Result] {
-      case m: Seq[Slot] => Ok(Json.obj("success" -> 0, "slots" -> m.toString()))
+      case m: Seq[Slot] => Ok(Json.obj(
+        "success" -> 0,
+        "slots" -> slotsJson(m)
+      ))
       case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
     }
   }
@@ -250,30 +245,5 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
   // (one-time insertion) insert sample data to the tables for testing purpose
   def insertSamples(): Action[AnyContent] = Action.async { _ =>
     model.insertSamples().map(info => Ok(info))
-  }
-
-  // current test: getUserInfo
-  def test(): Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    val form = extractForm(request)
-    val startAt = form.getOrElse("startAt", Seq())
-    val endAt = form.getOrElse("endAt", Seq())
-    if (startAt.isEmpty || endAt.isEmpty) {
-      Future.successful(Unauthorized(Json.obj(
-        "success" -> 1,
-        "message" -> "missing compulsory field: startAt or endAt (YYYY-MM-DD hh:mm:ss)."
-      )))
-    } else {
-      model.listTimeslots(Timestamp.valueOf(startAt.head), Timestamp.valueOf(endAt.head)).map{ r =>
-        if (r.nonEmpty) {
-          Ok(Json.obj(
-            "success" -> 0,
-            "slots" -> r.toString()))
-        } else {
-          Ok(Json.obj(
-            "success" -> 0,
-            "slots" -> "No available slots"))
-        }
-      }
-    }
   }
 }

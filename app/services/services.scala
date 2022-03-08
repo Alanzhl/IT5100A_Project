@@ -1,13 +1,13 @@
 package services
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import models.DBOperations
 import models.Tables._
 
 import java.sql.Timestamp
 
-class services(dbOperations: DBOperations) {
+class services(dbOperations: DBOperations)(implicit ec: ExecutionContext) {
   def validateUserLogin(email: String, password: String): Future[Option[Int]] = {
     (email, password) match {
       case ("", _) | (_, "") => Future.successful(None)
@@ -39,11 +39,11 @@ class services(dbOperations: DBOperations) {
     bookingID match {
       case -1 => Future.successful(None)
       case _ =>
-        if (Await.result(dbOperations.checkBookingOfUser(uid, bookingID), 10.seconds)) {
-          dbOperations.cancelABooking(bookingID)
-        } else {
-          Future.successful(None)
-        }
+        for {
+          valid <- dbOperations.checkBookingOfUser(uid, bookingID)
+          bookingID <-
+            if (valid) dbOperations.cancelABooking(bookingID) else Future.successful(None)
+        } yield bookingID
     }
   }
 
@@ -55,56 +55,88 @@ class services(dbOperations: DBOperations) {
     (uid, bookingID, slotID) match {
       case (_, -1, _) | (_, _, -1) => Future.successful(Right("Invalid request"))
       case _ =>
-        if (Await.result(dbOperations.checkBookingOfUser(uid, bookingID), 10.seconds)) {
-          dbOperations.updateABooking(bookingID, uid, slotID)
-        } else {
-          Future.successful(Right("Permission denied"))
-        }
+        for {
+          valid <- dbOperations.checkBookingOfUser(uid, bookingID)
+          bookingID <-
+            if (valid) dbOperations.updateABooking(bookingID, uid, slotID)
+            else Future.successful(Right("Permission denied"))
+        } yield bookingID
+    }
+  }
+
+  private def checkUserPermission(uid: Int) = {
+    Await.result(dbOperations.getUserInfo(uid), 10.seconds) match {
+      case Some(u) => u.identity == 0
+      case _ => false
     }
   }
 
   def listBookingsByTimeslot(uid: Int, slotID: Int): Future[Seq[Booking]] = {
-    slotID match {
-      case -1 => Future.successful(Vector.empty[Booking])
-      case _ => dbOperations.listBookingsByTimeslot(slotID)
+    if (checkUserPermission(uid)) {
+      slotID match {
+        case -1 => Future.successful(Vector.empty[Booking])
+        case _ => dbOperations.listBookingsByTimeslot(slotID)
+      }
+    } else {
+      Future.successful(Vector.empty[Booking])
     }
   }
 
   def createSlot(uid: Int, startAt: Timestamp, endAt: Timestamp, vacancy: Int): Future[Option[Future[Int]]] = {
-    if (vacancy < 0) {
-      Future.successful(Option[Future[Int]](Future.successful(0)))
+    if (checkUserPermission(uid)) {
+      if (vacancy < 0) {
+        Future.successful(Some(Future.successful(0)))
+      } else {
+        dbOperations.createTimeslot(startAt, endAt, vacancy)
+      }
     } else {
-      dbOperations.createTimeslot(startAt, endAt, vacancy)
+      Future.successful(Some(Future.successful(0)))
     }
   }
 
   def closeTimeslot(uid: Int, slotID: Int): Future[Int] = {
-    slotID match {
-      case -1 => Future.successful(-1)
-      case _ => dbOperations.updateATimeslot(slotID, 0)
+    if (checkUserPermission(uid)) {
+      slotID match {
+        case -1 => Future.successful(-1)
+        case _ => dbOperations.updateATimeslot(slotID, 0)
+      }
+    } else {
+      Future.successful(-1)
     }
   }
 
   def editTimeslot(uid: Int, slotID: Int, vacancy: Int): Future[Int] = {
-    slotID match {
-      case -1 => Future.successful(-1)
-      case _ => dbOperations.updateVacancy(slotID, vacancy)
+    if (checkUserPermission(uid)) {
+      slotID match {
+        case -1 => Future.successful(-1)
+        case _ => dbOperations.updateVacancy(slotID, vacancy)
+      }
+    } else {
+      Future.successful(-1)
     }
   }
 
   def markBooking(uid: Int, bookingID: Int, status: Short): Future[Option[Int]] = {
-    bookingID match {
-      case -1 => Future.successful(Option[Int](-1))
-      case _ =>
-        if (status == 2) {
-          dbOperations.markBookingAttended(bookingID)
-        } else {
-          dbOperations.markBookingFinished(bookingID)
-        }
+    if (checkUserPermission(uid)) {
+      bookingID match {
+        case -1 => Future.successful(Some(-1))
+        case _ =>
+          if (status == 2) {
+            dbOperations.markBookingAttended(bookingID)
+          } else {
+            dbOperations.markBookingFinished(bookingID)
+          }
+      }
+    } else {
+      Future.successful(Some(-1))
     }
   }
 
   def getSlotsInPeriod(uid: Int, startAt: Timestamp, endAt: Timestamp): Future[Seq[Slot]] = {
-    dbOperations.listTimeslots(startAt, endAt)
+    if (checkUserPermission(uid)) {
+      dbOperations.listTimeslots(startAt, endAt)
+    } else {
+      Future.successful(Seq.empty[Slot])
+    }
   }
 }

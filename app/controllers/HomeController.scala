@@ -165,11 +165,11 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
   def createTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     val form = extractForm(request)
     val uid = getUserSession(request)
-    val starAt = Timestamp.valueOf(form.getOrElse("starAt", Seq("-1")).head)
+    val startAt = Timestamp.valueOf(form.getOrElse("startAt", Seq("-1")).head)
     val endAt = Timestamp.valueOf(form.getOrElse("endAt", Seq("-1")).head)
     val vacancy = form.getOrElse("vacancy", Seq("-1")).head.toInt
 
-    (service.createSlot(uid, starAt, endAt, vacancy) map[Future[Result]] {
+    (service.createSlot(uid, startAt, endAt, vacancy) map[Future[Result]] {
       case Some(r: Future[Int]) => r map[Result] {
         case 1 => Ok(Json.obj("success" -> 0))
         case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
@@ -226,9 +226,9 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
   def getSlotsInPeriod: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
     val form = extractForm(request)
     val endAt = Timestamp.valueOf(form.getOrElse("endAt", Seq("-1")).head)
-    val starAt = Timestamp.valueOf(form.getOrElse("starAt", Seq("-1")).head)
+    val startAt = Timestamp.valueOf(form.getOrElse("startAt", Seq("-1")).head)
     val uid = getUserSession(request)
-    service.getSlotsInPeriod(uid, starAt, endAt) map[Result] {
+    service.getSlotsInPeriod(uid, startAt, endAt) map[Result] {
       case m: Seq[Slot] => Ok(Json.obj(
         "success" -> 0,
         "slots" -> slotsJson(m)

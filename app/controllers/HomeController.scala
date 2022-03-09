@@ -9,6 +9,7 @@ import services._
 import slick.jdbc.JdbcProfile
 
 import java.sql.Timestamp
+import java.time.format.DateTimeFormatter
 import javax.inject._
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -34,11 +35,12 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
   }
 
   private def slotsJson(m: Seq[Slot]): JsValue = {
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
     Json.toJson(m.map(slot =>
       Json.obj(
         "id" -> slot.slotID,
-        "start" -> slot.startAt,
-        "end" -> slot.endAt,
+        "start" -> slot.startAt.toLocalDateTime.format(formatter),
+        "end" -> slot.endAt.toLocalDateTime.format(formatter),
         "vacancy" -> slot.vacancy,
         "status" -> slot.status
       )))
@@ -171,8 +173,7 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
 
     (service.createSlot(uid, startAt, endAt, vacancy) map[Future[Result]] {
       case Some(r: Future[Int]) => r map[Result] {
-        case 1 => Ok(Json.obj("success" -> 0))
-        case _ => Ok(Json.obj("success" -> 1, "message" -> "Failed"))
+        _ => Ok(Json.obj("success" -> 0))
       }
       case _ =>
         Future.successful(
@@ -187,7 +188,7 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val uid = getUserSession(request)
     val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
     service.closeTimeslot(uid, slotID) map[Result] {
-      case 0 => Ok(Json.toJson(
+      case n: Int if (n > 0) => Ok(Json.toJson(
         Map("success" -> 0)
       ))
       case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))

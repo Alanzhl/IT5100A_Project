@@ -36,7 +36,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
       bookings ++= Seq(
         Booking(1, 3, 1, 2),
         Booking(2, 2, 1, 3),
-        Booking(3, 0, 2, 1),
+        Booking(3, 1, 2, 1),
         Booking(4, 1, 2, 3),
         Booking(5, 1, 3, 4)
       )

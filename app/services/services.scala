@@ -84,13 +84,10 @@ class services(dbOperations: DBOperations)(implicit ec: ExecutionContext) {
 
   def createSlot(uid: Int, startAt: Timestamp, endAt: Timestamp, vacancy: Int): Future[Option[Future[Int]]] = {
     if (checkUserPermission(uid)) {
-      if (vacancy < 0) {
-        Future.successful(Some(Future.successful(0)))
-      } else {
-        dbOperations.createTimeslot(startAt, endAt, vacancy)
-      }
+      if (startAt.before(endAt) && vacancy > 0) dbOperations.createTimeslot(startAt, endAt, vacancy)
+      else Future.successful(None)
     } else {
-      Future.successful(Some(Future.successful(0)))
+      Future.successful(None)
     }
   }
 
@@ -107,8 +104,8 @@ class services(dbOperations: DBOperations)(implicit ec: ExecutionContext) {
 
   def editTimeslot(uid: Int, slotID: Int, vacancy: Int): Future[Int] = {
     if (checkUserPermission(uid)) {
-      slotID match {
-        case -1 => Future.successful(-1)
+      (slotID, vacancy) match {
+        case (-1, _) | (_, -1) => Future.successful(-1)
         case _ => dbOperations.updateVacancy(slotID, vacancy)
       }
     } else {
@@ -118,17 +115,13 @@ class services(dbOperations: DBOperations)(implicit ec: ExecutionContext) {
 
   def markBooking(uid: Int, bookingID: Int, status: Short): Future[Option[Int]] = {
     if (checkUserPermission(uid)) {
-      bookingID match {
-        case -1 => Future.successful(Some(-1))
-        case _ =>
-          if (status == 2) {
-            dbOperations.markBookingAttended(bookingID)
-          } else {
-            dbOperations.markBookingFinished(bookingID)
-          }
+      status match {
+        case 2 => dbOperations.markBookingAttended(bookingID)
+        case 3 => dbOperations.markBookingFinished(bookingID)
+        case _ => Future.successful(None)
       }
     } else {
-      Future.successful(Some(-1))
+      Future.successful(None)
     }
   }
 

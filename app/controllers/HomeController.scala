@@ -161,25 +161,29 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     }
   }
 
-  // TODO: THE FOLLOWING METHODS ARE NOT TESTED
-
   // createTimeslot: staffs add a timeslot
   def createTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    val form = extractForm(request)
-    val uid = getUserSession(request)
-    val startAt = Timestamp.valueOf(form.getOrElse("startAt", Seq("-1")).head)
-    val endAt = Timestamp.valueOf(form.getOrElse("endAt", Seq("-1")).head)
-    val vacancy = form.getOrElse("vacancy", Seq("-1")).head.toInt
+    try {
+      val form = extractForm(request)
+      val uid = getUserSession(request)
+      val startAt = Timestamp.valueOf(form.getOrElse("startAt", Seq("1970-01-01 0:0:1")).head)
+      val endAt = Timestamp.valueOf(form.getOrElse("endAt", Seq("1970-01-01 0:0:0")).head)
+      val vacancy = form.getOrElse("vacancy", Seq("50")).head.toInt
 
-    (service.createSlot(uid, startAt, endAt, vacancy) map[Future[Result]] {
-      case Some(r: Future[Int]) => r map[Result] {
-        _ => Ok(Json.obj("success" -> 0))
-      }
-      case _ =>
-        Future.successful(
-          InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
-        )
-    }).flatten
+      (service.createSlot(uid, startAt, endAt, vacancy) map[Future[Result]] {
+        case Some(r: Future[Int]) => r map[Result] {
+          _ => Ok(Json.obj("success" -> 0))
+        }
+        case _ =>
+          Future.successful(
+            InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+          )
+      }).flatten
+    } catch {
+      case e:Exception => Future.successful(
+        BadRequest(Json.obj("success" -> 1, "message" -> e.getMessage))
+      )
+    }
   }
 
   // closeTimeslot: staffs delete a timeslot
@@ -187,13 +191,15 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val form = extractForm(request)
     val uid = getUserSession(request)
     val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
-    service.closeTimeslot(uid, slotID) map[Result] {
-      case n: Int if (n > 0) => Ok(Json.toJson(
+    service.closeTimeslot(uid, slotID) map[Result] { n =>
+      if (n > 0) Ok(Json.toJson(
         Map("success" -> 0)
       ))
-      case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+      else InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
     }
   }
+
+  // TODO: THE FOLLOWING METHODS ARE NOT TESTED
 
   // editTimeslot: staffs edit a timeslot
   def editTimeslot: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
@@ -201,11 +207,11 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val vacancy = form.getOrElse("vacancy", Seq("-1")).head.toInt
     val uid = getUserSession(request)
     val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
-    service.editTimeslot(uid, slotID, vacancy) map[Result] {
-      case -1 => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
-      case _ => Ok(Json.toJson(
-        Map("success" -> 0)
-      ))
+    service.editTimeslot(uid, slotID, vacancy) map[Result] { n =>
+        if (n > 0) Ok(Json.toJson(
+          Map("success" -> 0)
+        ))
+        else InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
     }
   }
 
@@ -216,7 +222,7 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
     val uid = getUserSession(request)
     val bookingID = form.getOrElse("bookingID", Seq("-1")).head.toInt
     service.markBooking(uid, bookingID, status) map[Result] {
-      case Some(r: Int) if r >= 0 => Ok(Json.toJson(
+      case Some(_) => Ok(Json.toJson(
         Map("success" -> 0)
       ))
       case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
@@ -225,16 +231,21 @@ class HomeController @Inject()(protected val dbConfigProvider: DatabaseConfigPro
 
   // getSlotsInPeriod: list all time slots in a specific time period for staffs
   def getSlotsInPeriod: Action[AnyContent] = Action.async { request: Request[AnyContent] =>
-    val form = extractForm(request)
-    val endAt = Timestamp.valueOf(form.getOrElse("endAt", Seq("-1")).head)
-    val startAt = Timestamp.valueOf(form.getOrElse("startAt", Seq("-1")).head)
-    val uid = getUserSession(request)
-    service.getSlotsInPeriod(uid, startAt, endAt) map[Result] {
-      case m: Seq[Slot] => Ok(Json.obj(
-        "success" -> 0,
-        "slots" -> slotsJson(m)
-      ))
-      case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+    try {
+      val form = extractForm(request)
+      val startAt = Timestamp.valueOf(form.getOrElse("startAt", Seq("1970-01-01 0:0:1")).head)
+      val endAt = Timestamp.valueOf(form.getOrElse("endAt", Seq("1970-01-01 0:0:0")).head)
+      val uid = getUserSession(request)
+      service.getSlotsInPeriod(uid, startAt, endAt) map[Result] {
+        case m: Seq[Slot] => Ok(Json.obj(
+          "success" -> 0,
+          "slots" -> slotsJson(m)
+        ))
+        case _ => InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
+      }
+    } catch {
+      case e:Exception => Future.successful(
+        BadRequest(Json.obj("sucess" -> 1, "message" -> e.getMessage)))
     }
   }
 

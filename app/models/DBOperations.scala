@@ -25,7 +25,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
       slots ++= Seq(
         Slot(1, Timestamp.valueOf("2022-02-16 13:00:00"), Timestamp.valueOf("2022-02-16 15:00:00"), 19, 1),
         Slot(2, Timestamp.valueOf("2022-02-16 15:00:00"), Timestamp.valueOf("2022-02-16 17:00:00"), 6, 1),
-        Slot(3, Timestamp.valueOf("2022-02-16 17:00:00"), Timestamp.valueOf("2022-02-16 19:00:00"), 0, 2),
+        Slot(3, Timestamp.valueOf("2022-02-16 17:00:00"), Timestamp.valueOf("2022-02-16 19:00:00"), 0, 1),
         Slot(4, Timestamp.valueOf("2022-02-16 19:00:00"), Timestamp.valueOf("2022-02-16 21:00:00"), 15, 1)
       ),
       users ++= Seq(
@@ -89,7 +89,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
 
   // create a new timeslot
   // return value: slot id / None
-  def createTimeslot(startAt: Timestamp, endAt: Timestamp, vacancy: Int = 50): Future[Option[Future[Int]]] = {
+  def createTimeslot(startAt: Timestamp, endAt: Timestamp, vacancy: Int): Future[Option[Future[Int]]] = {
     val matches = db.run(slots.filter(s =>
       (s.startAt <= startAt && s.endAt > startAt)
         || (s.startAt < endAt && s.endAt >= endAt)).result)
@@ -110,7 +110,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // get the time slots between the interval [startAt, endAt]
   // return value: a list of detailed slot messages (slotID, startAt, endAt, vacancy, status)
   def listTimeslots(startAt: Timestamp, endAt: Timestamp): Future[Seq[Slot]] = {
-    db.run(slots.filter(s => s.startAt >= startAt && s.endAt <= endAt).result)
+    db.run(slots.filter(s => s.startAt >= startAt && s.endAt <= endAt).sortBy(_.startAt.asc).result)
   }
 
   // update the status of a time slot
@@ -121,7 +121,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   }
 
   // update the vacancy limit of a slot
-  // return value: current limit of the slot / None (fail to change due exceeding bookings)
+  // return value: number of affected rows (fail if it is 0)
   def updateVacancy(slotID: Int, vacancy: Int): Future[Int] = {
     val q = slots.filter(s => s.slotID === slotID).map(c => c.vacancy)
     db.run(q.update(vacancy))
@@ -142,8 +142,9 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
           } else if (r2.head.vacancy == 0) {
             Right(s"Slot $slotID is full!")
           } else {
-            Await.result(updateVacancy(slotID, r2.head.vacancy - 1).map(_ =>
-              Left(db.run((bookings returning bookings.map(_.bookingID)) += Booking(0, 1, userID, slotID)))), 10.seconds)
+            Await.result(updateVacancy(slotID, r2.head.vacancy - 1).map{_ =>
+              Left(db.run((bookings returning bookings.map(_.bookingID)) += Booking(0, 1, userID, slotID)))},
+              10.seconds)
           }
         }), 10.seconds)
       }
@@ -157,9 +158,11 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
       if (r.isEmpty) None
       else Await.result(db.run(bookings.filter(b => b.bookingID === bookingID).delete).map{
         case 0 => None
-        case _ => Await.result(db.run(slots.filter(_.slotID === r.head.slotID).result.map{ s =>
-          updateVacancy(s.head.slotID, s.head.vacancy + 1).map{_ => Some(bookingID)}
-        }).flatten, 10.seconds)
+        case _ => Await.result(
+          db.run(slots.filter(_.slotID === r.head.slotID).result.map{ s =>
+            updateVacancy(s.head.slotID, s.head.vacancy + 1).map{_ =>
+            Some(bookingID)}
+        }.transactionally).flatten, 10.seconds)
       }, 10.seconds)
     })
   }
@@ -176,7 +179,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // list all the bookings of a user
   // return value: a list of detailed booking messages (bookingID, status, userID, slotID, startAt, endAt)
   def listBookingsByUser(userID: Int): Future[Seq[Booking]] = {
-    db.run(bookings.filter(b => b.userID === userID).result)
+    db.run(bookings.filter(b => b.userID === userID).sortBy(_.bookingID.asc).result)
   }
 
   // check if a booking created by a user
@@ -188,7 +191,7 @@ class DBOperations(db: Database)(implicit ec: ExecutionContext) {
   // list all the bookings in a timeslot
   // return value: a list of detailed booking messages (bookingID, status, userID, slotID, startAt, endAt)
   def listBookingsByTimeslot(slotID: Int): Future[Seq[Booking]] = {
-    db.run(bookings.filter(b => b.slotID === slotID).result)
+    db.run(bookings.filter(b => b.slotID === slotID).sortBy(_.slotID).result)
   }
 
   // mark a booking as "attended"

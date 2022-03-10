@@ -45,13 +45,6 @@ class services(cache: CacheApi, dbOperations: DBOperations)(implicit ec: Executi
     cache.get[Short](curID.toString + "status").getOrElse(throw new RuntimeException("Wrong request")) == 1
   }
 
-  // get the vacancy of the timeslot
-  def getVacancy(slotId: Int): Int = {
-    cache.get[String](slotId.toString + "vacancy")
-      .getOrElse(throw new RuntimeException("Wrong request"))
-      .toInt
-  }
-
   // decrease vacancy of the timeslot by 1 atomically
   def decreaseVacancy(slotId: Int): Int = {
     cache.decrement(slotId.toString + "vacancy").toInt
@@ -94,7 +87,7 @@ class services(cache: CacheApi, dbOperations: DBOperations)(implicit ec: Executi
           if (getSlotOpeningInRedis(slotID)) {
             // update vacancy information in Redis atomically
             decreaseVacancy(slotID) match {
-              case r: Int if (r >= 0) =>
+              case r: Int if r >= 0 =>
                 dbOperations.bookASlot(uid, slotID) map[Either[Future[Int], String]] {
                   case Left(n: Future[Int]) => Left(n)
                   case Right(e: String) =>
@@ -102,7 +95,7 @@ class services(cache: CacheApi, dbOperations: DBOperations)(implicit ec: Executi
                     increaseVacancy(slotID)
                     Right(e)
                 }
-              case r: Int if (r < 0) =>
+              case r: Int if r < 0 =>
                 // revert change if no vacancy
                 increaseVacancy(slotID)
                 Future.successful(Right("No vacancy"))
@@ -142,12 +135,12 @@ class services(cache: CacheApi, dbOperations: DBOperations)(implicit ec: Executi
       case _ =>
         if (Await.result(dbOperations.checkBookingOfUser(uid, bookingID), 10.seconds)) {
           decreaseVacancy(slotID) match {
-            case r: Int if (r >= 0) =>
+            case r: Int if r >= 0 =>
               val userBookings = Await.result(dbOperations.listBookingsByUser(uid), 10.seconds)
               val oldSlotID = userBookings.filter(booking => booking.bookingID == bookingID).head.slotID
               increaseVacancy(oldSlotID)
               dbOperations.updateABooking(bookingID, uid, slotID)
-            case r: Int if (r < 0) =>
+            case r: Int if r < 0 =>
               // revert change if no vacancy
               increaseVacancy(slotID)
               Future.successful(Right("No vacancy"))
@@ -212,7 +205,7 @@ class services(cache: CacheApi, dbOperations: DBOperations)(implicit ec: Executi
         case (-1, _) | (_, -1) => Future.successful(-1)
         case _ =>
           dbOperations.updateVacancy(slotID, vacancy) map[Int] {
-            case n: Int if (n > 0) =>
+            case n: Int if n > 0 =>
               editSlotInRedis(slotID, vacancy)
               n
             case _ => -1

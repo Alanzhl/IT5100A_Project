@@ -5,13 +5,11 @@ import slick.jdbc.PostgresProfile.api._
 import java.sql.Timestamp
 
 
-// importable object
-object Tables extends {
-  val profile = slick.jdbc.PostgresProfile
-} with Tables
 
 // schemas of the tables
-class Tables {
+object Tables {
+  val profile = slick.jdbc.PostgresProfile
+
   case class Slot(slotID:Int, startAt:Timestamp, endAt:Timestamp, vacancy:Int, status:Short)
   class Slots(tag: Tag) extends Table[Slot](tag, "SLOTS") {
     def slotID = column[Int]("slot_id", O.AutoInc, O.PrimaryKey)

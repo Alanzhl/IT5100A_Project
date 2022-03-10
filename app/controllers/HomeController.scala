@@ -111,13 +111,13 @@ class HomeController @Inject()(cache: CacheApi, protected val dbConfigProvider: 
     val uid = getUserSession(request)
     val form = extractForm(request)
     val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
-    (service.bookASlot(uid, slotID) flatMap[Result] {
+    service.bookASlot(uid, slotID) flatMap[Result] {
       case Right(e: String) =>
         Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
       case Left(r: Future[Int]) => r.map[Result] {
         bid => Ok(Json.obj("success" -> 0, "bookingID" -> bid))
       }
-    })
+    }
   }
 
   // cancelBooking: user cancel a booking
@@ -147,11 +147,11 @@ class HomeController @Inject()(cache: CacheApi, protected val dbConfigProvider: 
     val slotID = form.getOrElse("slotID", Seq("-1")).head.toInt
     val bookingID = form.getOrElse("bookingID", Seq("-1")).head.toInt
     val uid = getUserSession(request)
-    (service.editUserBooking(uid, bookingID, slotID) flatMap[Result] {
+    service.editUserBooking(uid, bookingID, slotID) flatMap[Result] {
       case Right(e: String) =>
         Future.successful(BadRequest(Json.obj("success" -> 1, "message" -> e)))
       case Left(r: Future[Int]) => r.map[Result] { _ => Ok(Json.obj("success" -> 0)) }
-    })
+    }
   }
 
   // queryBookingRecords: staffs query bookings in a time slot
@@ -174,15 +174,15 @@ class HomeController @Inject()(cache: CacheApi, protected val dbConfigProvider: 
       val endAt = Timestamp.valueOf(form.getOrElse("endAt", Seq("1970-01-01 0:0:0")).head)
       val vacancy = form.getOrElse("vacancy", Seq("50")).head.toInt
 
-      (service.createSlot(uid, startAt, endAt, vacancy) flatMap[Result] {
-        case Some(r: Future[Int]) => r map[Result] { n: Int =>
+      service.createSlot(uid, startAt, endAt, vacancy) flatMap[Result] {
+        case Some(r: Future[Int]) => r map[Result] { _ =>
           Ok(Json.obj("success" -> 0))
         }
         case _ =>
           Future.successful(
             InternalServerError(Json.obj("success" -> 1, "message" -> "Failed"))
           )
-      })
+      }
     } catch {
       case e: Exception => Future.successful(
         BadRequest(Json.obj("success" -> 1, "message" -> e.getMessage))

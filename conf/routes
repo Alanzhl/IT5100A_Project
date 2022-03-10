@@ -1,0 +1,22 @@
+# Routes
+# This file defines all application routes (Higher priority routes first)
+# https://www.playframework.com/documentation/latest/ScalaRouting
+# ~~~~
+
+# An example controller showing a sample home page
+GET         /                      controllers.HomeController.index()
+PUT         /init                  controllers.HomeController.createTables()
+PUT         /insertSamples         controllers.HomeController.insertSamples()
+POST        /login                 controllers.HomeController.login()
+GET         /logout                controllers.HomeController.logout()
+POST        /register              controllers.HomeController.register()
+POST        /book                  controllers.HomeController.bookTimeslot()
+POST        /cancel                controllers.HomeController.cancelBooking()
+GET         /bookings              controllers.HomeController.queryUserBookings()
+POST        /slotbookings          controllers.HomeController.queryBookingRecords()
+POST        /edit                  controllers.HomeController.editUserBooking()
+POST        /addslot               controllers.HomeController.createTimeslot()
+POST        /closeslot             controllers.HomeController.closeTimeslot()
+POST        /editslot              controllers.HomeController.editTimeslot()
+POST        /markstatus            controllers.HomeController.markBookingStatus()
+POST        /slotsinperiod        controllers.HomeController.getSlotsInPeriod()
